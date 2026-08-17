@@ -337,6 +337,7 @@
   let alarmTimer = null;
   let alarmAudioCtx = null;
   let currentAlarmTaskId = null;
+  let activeAlarmNodes = [];
 
   const listEl = document.getElementById('taskList');
   const inputEl = document.getElementById('taskInput');
@@ -530,7 +531,7 @@
     const gap = 0.22;
     const cycle = beepLen + gap;
     const count = Math.ceil((durationMs/1000) / cycle);
-    const nodes = [];
+    activeAlarmNodes = [];
     for(let i=0;i<count;i++){
       const t0 = startTime + i*cycle;
       const osc = ctx.createOscillator();
@@ -545,9 +546,23 @@
       gainNode.connect(ctx.destination);
       osc.start(t0);
       osc.stop(t0 + beepLen + 0.02);
-      nodes.push(osc);
+      activeAlarmNodes.push({ osc, gainNode });
     }
-    return nodes;
+  }
+
+  function killAllAlarmSound(){
+    const ctx = alarmAudioCtx;
+    if(ctx){
+      const now = ctx.currentTime;
+      activeAlarmNodes.forEach(({ osc, gainNode }) => {
+        try{
+          gainNode.gain.cancelScheduledValues(now);
+          gainNode.gain.setValueAtTime(0, now);
+          osc.stop(now);
+        }catch(e){ /* already stopped */ }
+      });
+    }
+    activeAlarmNodes = [];
   }
 
   function triggerAlarm(task){
@@ -576,6 +591,7 @@
   function stopAlarm(){
     alarmOverlay.classList.remove('show');
     clearTimeout(alarmTimer);
+    killAllAlarmSound();
     if('vibrate' in navigator) navigator.vibrate(0);
     currentAlarmTaskId = null;
   }
